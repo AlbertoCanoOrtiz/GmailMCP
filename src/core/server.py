@@ -9,47 +9,52 @@ from fastmcp import FastMCP, Context
 # Tool handlers
 from ..tools.handlers import handle_get_gmail_message, handle_list_gmail_messages, handle_send_gmail_message, handle_download_gmail_attachment
 
+# Utils for Auth
+from ..utils.utils import get_oauth_token
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 
 # Initialize FastMCP server
 mcp = FastMCP(
-    "dogjgp-server",
+    "gmail-mcp",
     dependencies=["httpx"]
 )
 
 # Global API Client
 http_client: httpx.AsyncClient | None = None
-BASE_URL = os.getenv('DOGSJGP_API_URL', 'https://dogjgp.mx/api')
-API_KEY = os.getenv('DOGSJGP_API_KEY')
+BASE_URL = 'https://gmail.googleapis.com/gmail/v1/users/me'
 
 @mcp.on_startup
 async def on_startup(ctx: Context):
     """Initialize API client and verify connection on startup."""
     global http_client
     
+    token = get_oauth_token()
+    
     log.info('API Configuration:')
     log.info(f'Base URL: {BASE_URL}')
-    log.info(f'API Key: {"Available" if API_KEY else "Not available"}')
+    log.info(f'OAuth Token: {"Available" if token else "Not available"}')
 
-    if not API_KEY:
-        log.warning('Warning: DOGSJGP_API_KEY environment variable not set')
+    if not token:
+        log.warning('Warning: Valid OAuth token not found. Please run utils.py to generate credentials.')
 
     http_client = httpx.AsyncClient(
         base_url=BASE_URL,
         headers={
-            'Authorization': API_KEY or "",
+            'Authorization': f"Bearer {token}" if token else "",
             'Content-Type': 'application/json',
-            'User-Agent': 'DOGSJGP-MCP-Server/1.0.0'
+            'User-Agent': 'Gmail-MCP-Server/1.0.0'
         },
         timeout=30.0
     )
 
     try:
-        response = await http_client.get('/public/v1/integrations')
+        # Test connection by getting user profile
+        response = await http_client.get('/profile')
         if response.status_code == 401:
-            log.error('Invalid API key')
+            log.error('Invalid or expired OAuth token')
         elif response.status_code == 404:
             log.error('API endpoint not found')
         elif response.is_error:
@@ -97,7 +102,10 @@ async def send_gmail_message(
 
     
 @mcp.tool(description="Download an attachment from a Gmail message.")
-async def download_gmail_attachment(attachment_id: str = Field(..., description="The ID of the attachment to download")) -> dict:
+async def download_gmail_attachment(
+    message_id: str = Field(..., description="The ID of the message containing the attachment."),
+    attachment_id: str = Field(..., description="The ID of the attachment to download")
+) -> dict:
     if not http_client:
         raise RuntimeError("API client not initialized")
-    return await handle_download_gmail_attachment(http_client, attachment_id)
+    return await handle_download_gmail_attachment(http_client, message_id, attachment_id)

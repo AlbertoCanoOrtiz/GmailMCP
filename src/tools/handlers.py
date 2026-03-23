@@ -1,11 +1,15 @@
-import os
 import logging
+import httpx
+import base64
+from email.mime.text import MIMEText
 
+log = logging.getLogger(__name__)
 
 
 async def handle_get_gmail_message(client: httpx.AsyncClient, message_id: str) -> dict:
     try:
-        response = await client.get(f'/gmail/messages/{message_id}')
+        # Google API: /users/me/messages/{id} (Base URL handles prefix)
+        response = await client.get(f'/messages/{message_id}')
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
@@ -18,7 +22,8 @@ async def handle_get_gmail_message(client: httpx.AsyncClient, message_id: str) -
 
 async def handle_list_gmail_messages(client: httpx.AsyncClient, count: int) -> dict:
     try:
-        response = await client.get('/gmail/messages', params={'count': count})
+        # Google API: /users/me/messages?maxResults={count}
+        response = await client.get('/messages', params={'maxResults': count})
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
@@ -30,15 +35,20 @@ async def handle_list_gmail_messages(client: httpx.AsyncClient, count: int) -> d
 
     
 async def handle_send_gmail_message(client: httpx.AsyncClient, to: str, subject: str, body: str, cc: str | None, bcc: str | None) -> dict:
-    payload = {
-        'to': to,
-        'subject': subject,
-        'body': body,
-        'cc': cc,
-        'bcc': bcc
-    }
+    # Create the email message using MIME
+    message = MIMEText(body)
+    message['to'] = to
+    message['subject'] = subject
+    if cc: message['cc'] = cc
+    if bcc: message['bcc'] = bcc
+
+    # Google API requires raw base64url encoded string
+    raw_string = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    payload = {'raw': raw_string}
+
     try:
-        response = await client.post('/gmail/send', json=payload)
+        # Google API: /users/me/messages/send
+        response = await client.post('/messages/send', json=payload)
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
@@ -49,9 +59,10 @@ async def handle_send_gmail_message(client: httpx.AsyncClient, to: str, subject:
         raise RuntimeError(f"Unexpected error: {e}")
 
 
-async def handle_download_gmail_attachment(client: httpx.AsyncClient, attachment_id: str) -> dict:
+async def handle_download_gmail_attachment(client: httpx.AsyncClient, message_id: str, attachment_id: str) -> dict:
     try:
-        response = await client.get(f'/gmail/attachments/{attachment_id}')
+        # Correct Google API path for attachments
+        response = await client.get(f'/messages/{message_id}/attachments/{attachment_id}')
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:

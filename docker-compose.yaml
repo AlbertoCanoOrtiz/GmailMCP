@@ -1,0 +1,25 @@
+services:
+  gmail-mcp:
+    build: .
+    container_name: gmail-mcp
+    ports:
+      - "3085:3085"
+    environment:
+      - PYTHONUNBUFFERED=1
+    secrets:
+      - source: token_json
+        target: /home/mcp_gmail_assist/run/secrets/token.json
+        uid: "1000"
+        gid: "1000"
+        mode: 0440
+      - source: credentials_json
+        target: /home/mcp_gmail_assist/run/secrets/dogsjgp_dev_gcp_gmail_mcp_server.json
+        uid: "1000"
+        gid: "1000"
+        mode: 0440
+
+secrets:
+  token_json:
+    file: ${HOME}/run/secrets/token.json
+  credentials_json:
+    file: ${HOME}/run/secrets/dogsjgp_dev_gcp_gmail_mcp_server.json

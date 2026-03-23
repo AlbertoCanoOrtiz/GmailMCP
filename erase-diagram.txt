@@ -1,0 +1,51 @@
+// Title: Gmail MCP Server Architecture
+// Type: Service Oriented Architecture
+
+// --- Service Definitions ---
+
+Group Client Layer {
+  Node Client [icon: robot, label: "AI Client Claude Cursor"]
+}
+
+Group Docker Host Environment {
+  Group "Container: gmail-mcp" {
+    
+    // Infrastructure Layer
+    Transport [icon: globe, label: "Transport Layer\n(HTTP/SSE :3085 or Stdio)"]
+    
+    // Application Layer
+    MCPServer [icon: cpu, label: "FastMCP Core\n(server.py)"]
+    
+    // Domain Layer
+    Tools [icon: package, label: "Tool Handlers\n(handlers.py)"]
+    
+    // Security Layer
+    Secrets [icon: lock, label: "Docker Secrets\n(/run/secrets/token.json)"]
+  }
+}
+
+Group External Providers {
+  GoogleAPI [icon: google, label: "Google Gmail API\n(gmail.googleapis.com)"]
+}
+
+// --- Data Flow Connections ---
+
+// 1. Connection Request
+Client > Transport : "1. MCP Protocol (JSON-RPC)"
+
+// 2. Request Routing
+Transport > MCPServer : "2. Route Request"
+
+// 3. Auth Injection
+Secrets > MCPServer : "3. Load OAuth Token"
+
+// 4. Tool Execution
+MCPServer > Tools : "4. Invoke Tool"
+
+// 5. External API Call
+Tools > GoogleAPI : "5. HTTPS REST Request"
+
+// 6. Response Chain
+GoogleAPI > Tools : "JSON Response"
+Tools > MCPServer : "Process Data"
+MCPServer > Client : "Final Result"
